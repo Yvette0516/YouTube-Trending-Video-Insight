@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>韩国热门视频播放量 TOP10 | Trending Video Insight</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- 顶部标题栏 -->
+    <header class="app-header">
+      <div class="app-header__main">
+        <h1 class="app-title">
+          <span class="app-title__flag" aria-hidden="true">🇰🇷</span>
+          韩国热门视频播放量 TOP10
+        </h1>
+        <p class="app-subtitle">
+          数据来源 <code>KRvideos.csv</code> · 国家 <strong>KR</strong> · 由 JavaScript 的 <code>fetch</code> 读取本地 CSV/JSON 生成
+        </p>
+      </div>
+      <div class="app-header__meta">
+        <span class="meta-label">数据更新时间</span>
+        <time id="data-updated-at" class="meta-value">—</time>
+        <span id="data-total" class="meta-badge">—</span>
+      </div>
+    </header>
+
+    <!-- 控制区：搜索 / 类别筛选 / 排序 / 重置 -->
+    <section class="controls" aria-label="筛选与排序">
+      <div class="control control--search">
+        <label class="control__label" for="search-input">搜索</label>
+        <div class="search-box">
+          <span class="search-box__icon" aria-hidden="true">🔍</span>
+          <input
+            id="search-input"
+            class="search-box__input"
+            type="search"
+            placeholder="输入视频标题、频道名或类别…"
+            autocomplete="off"
+            spellcheck="false">
+          <button id="search-clear" class="search-box__clear" type="button" title="清空搜索" hidden>✕</button>
+        </div>
+      </div>
+
+      <div class="control">
+        <label class="control__label" for="category-select">类别筛选</label>
+        <select id="category-select" class="select">
+          <option value="">全部类别</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <span class="control__label" id="sort-label">排序方式</span>
+        <div class="sort-group" role="group" aria-labelledby="sort-label">
+          <button class="sort-btn is-active" type="button" data-sort="views">播放量</button>
+          <button class="sort-btn" type="button" data-sort="likes">点赞数</button>
+          <button class="sort-btn" type="button" data-sort="like_rate">点赞率</button>
+        </div>
+      </div>
+
+      <div class="control control--actions">
+        <button id="reset-btn" class="reset-btn" type="button">重置筛选</button>
+      </div>
+    </section>
+
+    <!-- 结果统计 -->
+    <div id="result-summary" class="result-summary" hidden></div>
+
+    <!-- 状态提示：加载中 / 失败 / 无结果 -->
+    <div id="status-region" class="status" role="status" aria-live="polite" hidden>
+      <div id="status-spinner" class="spinner" hidden></div>
+      <p id="status-title" class="status__title"></p>
+      <p id="status-detail" class="status__detail"></p>
+      <button id="status-retry" class="retry-btn" type="button" hidden>重新加载</button>
+    </div>
+
+    <!-- 榜单表格 -->
+    <section id="list-section" class="list-section" hidden>
+      <div class="table-wrap">
+        <table class="rank-table">
+          <caption class="sr-only">韩国热门视频榜单，默认展示播放量前 10 名</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="col-rank">排名</th>
+              <th scope="col" class="col-title">视频标题</th>
+              <th scope="col" class="col-channel">频道</th>
+              <th scope="col" class="col-category">类别</th>
+              <th scope="col" class="col-num">播放量</th>
+              <th scope="col" class="col-num">点赞数</th>
+              <th scope="col" class="col-num">评论数</th>
+              <th scope="col" class="col-num">点赞率</th>
+              <th scope="col" class="col-date">上榜日期</th>
+            </tr>
+          </thead>
+          <tbody id="rank-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
