@@ -1,3 +1,4 @@
 {
-  "liveServer.settings.root": "/study/week3"
+  "liveServer.settings.root": "/study",
+  "liveServer.settings.port": 5501
 }

@@ -1,187 +1,99 @@
 /* ==========================================================================
  * 韩国热门视频播放量 TOP10 —— 前端交互逻辑
  * ---------------------------------------------------------------------------
- * 第三周核心：DOM 操作 + 事件绑定 + fetch 读取本地 CSV/JSON + 交互渲染
+ * 第三周核心：DOM 操作 + 事件绑定 + 用 fetch 读取本地 CSV/JSON + 交互渲染
  *
- * 数据来源：不使用任何预生成的 JSON。页面打开时用 fetch 读取
- *          data/ 下的原始 CSV 与 JSON，在浏览器里现场解析、清洗、去重、排序。
+ * 页面打开时用 fetch 读取 data/ 下的三个文件，在浏览器里现场解析、清洗、
+ * 去重、排序，再渲染成表格 —— 没有任何预生成的 JSON，也不用 pandas。
  *
- * 模块划分（对应方案 2.3 D）：
- *   CsvParser        引用感知的 CSV 解析器
- *   DataLoader       用 fetch 读取 CSV/JSON 并完成解析清洗去重
- *   Formatter        数字、百分比、日期格式化
- *   CategoryService  生成类别下拉项
- *   FilterService    关键词与类别过滤
- *   SortService      按字段排序
- *   RankingService   截取 TOP N
- *   ViewRenderer     渲染榜单与状态
- *   EventBinder      绑定搜索 / 筛选 / 排序 / 重置
+ * 整体流程（从下往上读代码正好是这个顺序）：
+ *   boot()        启动：显示加载提示 → 读数据 → 建下拉 → 渲染
+ *   loadData()    用 fetch 读三个文件，解析出视频数组
+ *   parseCsv()    引用感知的 CSV 解析器（CSV 里有逗号和换行在引号内）
+ *   render()      筛选 → 排序 → 截取前 N 条 → 画表格
+ *   bindEvents()  搜索 / 类别 / 排序 / 重置四个交互
  *
- * 安全约定：所有来自数据的文本（标题、频道名、类别名）一律通过
- *          textContent 写入 DOM，绝不拼接 HTML 字符串，避免 XSS。
+ * 安全约定：所有来自数据的文本（标题、频道名、类别名）都用 textContent
+ *          写进 DOM，不拼 HTML 字符串，避免 XSS。
  * ========================================================================== */
 
 (function () {
   'use strict';
 
   /* ======================================================================
-   * 配置
-   *
-   * 本页面不使用任何预生成的 JSON —— 打开时直接用 fetch 读取本地 CSV/JSON，
-   * 在浏览器里现场解析、清洗、去重，再渲染。
+   * 1. 配置与 DOM 引用
    * ==================================================================== */
+
   var CONFIG = {
-    csvUrl: 'data/KRvideos.csv',                              // 原始 CSV（34.8 MB）
-    categoryJsonUrl: 'data/KR_category_id.json',              // 类别英文名
-    categoryMapUrl: 'data/YouTube视频分类映射表.csv',          // 类别中文名
-    topN: 10,             // 默认榜单长度（无筛选时只显示 TOP10）
-    filteredLimit: 100,   // 带筛选条件时最多展示条数（第三周不做复杂分页）
-    fetchTimeoutMs: 120000 // CSV 较大，超时给足 2 分钟
+    csvUrl: 'data/KRvideos.csv',                       // 原始 CSV，34.8 MB
+    categoryJsonUrl: 'data/KR_category_id.json',       // 类别英文名
+    categoryMapUrl: 'data/YouTube视频分类映射表.csv',   // 类别中文名
+    topN: 10,             // 没筛选时只显示前 10 名
+    filteredLimit: 100,   // 有筛选时最多显示 100 条（本页不做分页）
+    timeoutMs: 120000,    // CSV 很大，给 2 分钟超时
   };
 
-  var DATA_FILES = CONFIG.csvUrl + '、' + CONFIG.categoryJsonUrl +
-                   ' 和 ' + CONFIG.categoryMapUrl;
+  // 错误提示里要列出文件名，提前拼好
+  var FILE_LIST = 'KRvideos.csv、KR_category_id.json 和 YouTube视频分类映射表.csv';
 
-  var COUNTRY = 'KR';
+  var $ = function (id) { return document.getElementById(id); };
 
-  /* ======================================================================
-   * Formatter —— 格式化
-   * ==================================================================== */
-  var Formatter = {
-    /** 千分位整数：113876217 -> "113,876,217" */
-    number: function (n) {
-      if (typeof n !== 'number' || !isFinite(n)) return '—';
-      return Math.round(n).toLocaleString('en-US');
-    },
-
-    /** 点赞率：0.024687 -> "2.47%" */
-    percent: function (r, digits) {
-      if (typeof r !== 'number' || !isFinite(r)) return '—';
-      var d = typeof digits === 'number' ? digits : 2;
-      return (r * 100).toFixed(d) + '%';
-    },
-
-    /** 上榜日期：原始格式 "17.11.12"（YY.DD.MM）原样展示 */
-    trendingDate: function (s) {
-      var v = String(s == null ? '' : s).trim();
-      return v === '' ? '—' : v;
-    },
-
-    /** 生成时间 ISO -> 本地可读：2026/9/19 23:28 */
-    timestamp: function (iso) {
-      if (!iso) return '—';
-      var d = new Date(iso);
-      if (isNaN(d.getTime())) return String(iso);
-      var p = function (x) { return x < 10 ? '0' + x : String(x); };
-      return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate() +
-             ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
-    }
-  };
-
-  /* ======================================================================
-   * DOM 引用
-   * ==================================================================== */
   var el = {
-    updatedAt: document.getElementById('data-updated-at'),
-    totalBadge: document.getElementById('data-total'),
-    searchInput: document.getElementById('search-input'),
-    searchClear: document.getElementById('search-clear'),
-    categorySelect: document.getElementById('category-select'),
+    updatedAt: $('data-updated-at'),
+    totalBadge: $('data-total'),
+    searchInput: $('search-input'),
+    searchClear: $('search-clear'),
+    categorySelect: $('category-select'),
     sortButtons: Array.prototype.slice.call(document.querySelectorAll('.sort-btn')),
-    resetBtn: document.getElementById('reset-btn'),
-    summary: document.getElementById('result-summary'),
-    statusRegion: document.getElementById('status-region'),
-    statusSpinner: document.getElementById('status-spinner'),
-    statusTitle: document.getElementById('status-title'),
-    statusDetail: document.getElementById('status-detail'),
-    statusRetry: document.getElementById('status-retry'),
-    listSection: document.getElementById('list-section'),
-    rankBody: document.getElementById('rank-body')
+    resetBtn: $('reset-btn'),
+    summary: $('result-summary'),
+    status: $('status-region'),
+    statusSpinner: $('status-spinner'),
+    statusTitle: $('status-title'),
+    statusDetail: $('status-detail'),
+    statusRetry: $('status-retry'),
+    listSection: $('list-section'),
+    rankBody: $('rank-body'),
   };
 
-  /* ======================================================================
-   * 应用状态
-   * ==================================================================== */
+  // 当前的筛选与排序条件
   var state = {
-    allVideos: [],
-    meta: null,
+    allVideos: [],        // 解析后的全部视频（已去重、已排序）
     keyword: '',
     category: '',
     sortKey: 'views',
-    loadError: null
+    loadError: null,
   };
+
+  var SORT_LABELS = { views: '播放量', likes: '点赞数', like_rate: '点赞率' };
 
   /* ======================================================================
-   * DataLoader —— 用 fetch 读取本地 CSV/JSON 并现场处理
-   *
-   * 流程：fetch CSV → 容错解码 → 引用感知解析 → 类别映射
-   *       → 清洗 → 按 video_id 去重 → 排序 → 交给渲染层
+   * 2. 格式化
    * ==================================================================== */
 
-  /** 带超时的 fetch，避免网络异常时页面一直转圈 */
-  function fetchWithTimeout(url, asText) {
-    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    var timer = setTimeout(function () {
-      if (controller) controller.abort();
-    }, CONFIG.fetchTimeoutMs);
-
-    var opts = { cache: 'no-store' };
-    if (controller) opts.signal = controller.signal;
-
-    return fetch(url, opts).then(function (res) {
-      clearTimeout(timer);
-      if (!res.ok) {
-        throw new Error('请求 ' + url + ' 失败，HTTP 状态码 ' + res.status);
-      }
-      if (!asText) return res.json();
-      // 用非 fatal 的 TextDecoder：原始 CSV 存在少量损坏字节，
-      // fatal 模式会直接抛错导致整个文件读不了；这里替换成 U+FFFD 继续处理。
-      return res.arrayBuffer().then(function (buf) {
-        return new TextDecoder('utf-8', { fatal: false }).decode(buf);
-      });
-    }).catch(function (err) {
-      clearTimeout(timer);
-      throw err;
-    });
+  /** 千分位：113876217 -> "113,876,217" */
+  function fmtNumber(n) {
+    if (typeof n !== 'number' || !isFinite(n)) return '—';
+    return Math.round(n).toLocaleString('en-US');
   }
 
-  /**
-   * 引用感知的 CSV 解析器。
-   * 必须处理引号内的逗号与换行 —— 原始 CSV 的 tags / description 字段里
-   * 就含带引号的换行符，按行切分会造成字段错位并静默丢数据。
-   */
-  var CsvParser = {
-    parse: function (text) {
-      var src = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text; // 去 BOM
-      var rows = [];
-      var row = [];
-      var field = '';
-      var inQuotes = false;
-      var n = src.length;
+  /** 点赞率：0.024687 -> "2.47%" */
+  function fmtPercent(r) {
+    if (typeof r !== 'number' || !isFinite(r)) return '—';
+    return (r * 100).toFixed(2) + '%';
+  }
 
-      for (var i = 0; i < n; i++) {
-        var ch = src.charAt(i);
-        if (inQuotes) {
-          if (ch === '"') {
-            if (src.charAt(i + 1) === '"') { field += '"'; i++; } // 转义的引号
-            else inQuotes = false;
-          } else {
-            field += ch;
-          }
-          continue;
-        }
-        if (ch === '"') { inQuotes = true; continue; }
-        if (ch === ',') { row.push(field); field = ''; continue; }
-        if (ch === '\r') continue;
-        if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; continue; }
-        field += ch;
-      }
-      if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
-      return rows;
-    },
-  };
+  /** 时间戳 -> "2026/9/19 23:28" */
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso);
+    var pad = function (x) { return x < 10 ? '0' + x : String(x); };
+    return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate()
+      + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
 
-  /** 转数字，无法解析返回 null（便于与真实的 0 区分） */
+  /** 文本转数字，解析不出来返回 null（这样能跟真实的 0 区分开） */
   function toNumber(raw) {
     if (raw === undefined || raw === null) return null;
     var s = String(raw).trim().replace(/,/g, '');
@@ -190,476 +102,396 @@
     return isFinite(v) ? v : null;
   }
 
-  var DataLoader = {
-    /** 读取并处理三个输入文件，返回 { videos, meta } */
-    loadAll: function () {
-      var startedAt = Date.now();
-      return Promise.all([
-        fetchWithTimeout(CONFIG.categoryJsonUrl, false),
-        fetchWithTimeout(CONFIG.categoryMapUrl, true),
-        fetchWithTimeout(CONFIG.csvUrl, true),
-      ]).then(function (r) {
-        var catJson = r[0];
-        var mapText = r[1];
-        var csvText = r[2];
+  /* ======================================================================
+   * 3. CSV 解析
+   *
+   * 不能简单地按行 split('\n') 再用逗号切 —— 原始 CSV 的 tags 和
+   * description 字段里有被引号包起来的逗号和换行，那样切会让字段错位、
+   * 悄悄丢掉数据。所以必须一个字符一个字符地读，记住自己是否在引号内。
+   * ==================================================================== */
+  function parseCsv(text) {
+    var src = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;  // 去掉 BOM
+    var rows = [];
+    var row = [];
+    var field = '';
+    var inQuotes = false;
 
-        // ---- 类别映射：中文（映射表）+ 英文（数据集 JSON）----
-        var idToZh = Object.create(null);
-        var mapRows = CsvParser.parse(mapText);
-        var mh = mapRows[0];
-        var mi = mh.indexOf('category_id');
-        var mzh = mh.indexOf('chinese_name');
-        if (mi < 0 || mzh < 0) throw new Error('映射表缺少 category_id 或 chinese_name 列');
-        for (var k = 1; k < mapRows.length; k++) {
-          var mr = mapRows[k];
-          if (!mr || mr.length <= mzh) continue;
-          var mid = String(mr[mi]).trim();
-          if (mid) idToZh[mid] = String(mr[mzh]).trim();
+    for (var i = 0; i < src.length; i += 1) {
+      var ch = src.charAt(i);
+
+      if (inQuotes) {
+        if (ch === '"') {
+          if (src.charAt(i + 1) === '"') { field += '"'; i += 1; }  // "" 表示一个引号
+          else inQuotes = false;                                    // 引号结束
+        } else {
+          field += ch;
         }
+        continue;
+      }
 
-        var idToEn = Object.create(null);
-        var items = (catJson && catJson.items) || [];
-        for (var j = 0; j < items.length; j++) {
-          idToEn[String(items[j].id)] = (items[j].snippet && items[j].snippet.title) || '';
-        }
+      if (ch === '"') { inQuotes = true; continue; }
+      if (ch === ',') { row.push(field); field = ''; continue; }
+      if (ch === '\r') continue;                                    // 忽略回车
+      if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; continue; }
+      field += ch;
+    }
+    // 最后一行可能没有换行符结尾
+    if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+    return rows;
+  }
 
-        // ---- 解析 CSV ----
-        var records = CsvParser.parse(csvText);
-        if (!records.length) throw new Error('CSV 内容为空，无法解析。');
-        var header = records[0];
-        var col = Object.create(null);
-        for (var h = 0; h < header.length; h++) col[header[h]] = h;
+  /* ======================================================================
+   * 4. 读取与清洗数据
+   * ==================================================================== */
 
-        var required = ['video_id', 'title', 'channel_title', 'category_id', 'views',
-          'likes', 'dislikes', 'comment_count', 'trending_date', 'publish_time', 'tags'];
-        for (var q = 0; q < required.length; q++) {
-          if (col[required[q]] === undefined) {
-            throw new Error('原始 CSV 缺少必需字段：' + required[q]);
-          }
-        }
+  /** 带超时的 fetch，避免网络异常时页面一直转圈 */
+  function fetchText(url, asText) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, CONFIG.timeoutMs);
 
-        // ---- 清洗 + 按 video_id 去重（保留播放量最高的一条）----
-        var best = Object.create(null);
-        var droppedMissing = 0;
-        var brokenKey = 0;
-        var unmapped = 0;
-
-        for (var x = 1; x < records.length; x++) {
-          var rec = records[x];
-          if (rec.length !== header.length) continue; // 字段数异常的行跳过
-
-          var videoId = String(rec[col.video_id] || '').trim();
-          var title = String(rec[col.title] || '').trim();
-          var channel = String(rec[col.channel_title] || '').trim();
-          var views = toNumber(rec[col.views]);
-
-          if (!videoId || !title || !channel || views === null) { droppedMissing++; continue; }
-          // 容错解码留下的替换字符若落在关键字段，该行不可靠
-          if (videoId.indexOf('\uFFFD') >= 0 || title.indexOf('\uFFFD') >= 0
-              || channel.indexOf('\uFFFD') >= 0) { brokenKey++; continue; }
-
-          var likes = toNumber(rec[col.likes]) || 0;
-          var prev = best[videoId];
-          if (prev !== undefined) {
-            if (prev.views > views) continue;
-            // 播放量相同时（数据集存在这种重复快照）比点赞，取数值更完整的那条
-            if (prev.views === views && prev.likes >= likes) continue;
-          }
-
-          var categoryId = String(rec[col.category_id] || '').trim();
-          var categoryName = idToZh[categoryId];
-          if (categoryName === undefined) {
-            unmapped++;
-            categoryName = idToEn[categoryId] || '未分类';
-          }
-
-          best[videoId] = {
-            video_id: videoId,
-            title: title,
-            channel_title: channel,
-            category_id: categoryId,
-            category_name: categoryName,
-            views: views,
-            likes: likes,
-            dislikes: toNumber(rec[col.dislikes]) || 0,
-            comment_count: toNumber(rec[col.comment_count]) || 0,
-            like_rate: views > 0 ? Number((likes / views).toFixed(6)) : 0,
-            trending_date: String(rec[col.trending_date] || '').trim(),
-            publish_time: String(rec[col.publish_time] || '').trim(),
-            tags: String(rec[col.tags] || '').trim(),
-            country: COUNTRY,
-          };
-        }
-
-        // ---- 排序：播放量降序 → 点赞降序 → video_id 升序 ----
-        // 第三个键让「播放量与点赞都相同」时结果确定、可复现
-        var videos = [];
-        for (var id in best) videos.push(best[id]);
-        videos.sort(function (a, b) {
-          return (b.views - a.views)
-            || (b.likes - a.likes)
-            || (a.video_id < b.video_id ? -1 : a.video_id > b.video_id ? 1 : 0);
+    return fetch(url, { cache: 'no-store', signal: controller.signal })
+      .then(function (res) {
+        clearTimeout(timer);
+        if (!res.ok) throw new Error('请求 ' + url + ' 失败，HTTP 状态码 ' + res.status);
+        if (!asText) return res.json();
+        /*
+         * 原始 CSV 里有少量损坏字节，直接用 res.text()（内部是 fatal 解码）
+         * 会整份读不出来。这里用 fatal:false 把坏字节换成「�」继续读，
+         * 之后再把这些行丢掉（见下面的 brokenKey 判断）。
+         */
+        return res.arrayBuffer().then(function (buf) {
+          return new TextDecoder('utf-8', { fatal: false }).decode(buf);
         });
+      })
+      .catch(function (err) {
+        clearTimeout(timer);
+        throw err;
+      });
+  }
 
-        var elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
-        var meta = {
-          country: COUNTRY,
-          country_name: '韩国',
-          source_file: 'KRvideos.csv',
-          category_file: 'KR_category_id.json',
-          category_map_file: 'YouTube视频分类映射表.csv',
-          generated_by: '浏览器端 JavaScript fetch（无预生成 JSON、无 pandas）',
-          generated_at: new Date().toISOString(),
-          total_records: videos.length,
-          load_seconds: Number(elapsed),
-          dedupe: 'by video_id, keep max views',
-          category_language: 'zh',
+  /** 把「类别 id -> 中文名」和「类别 id -> 英文名」两张表建好 */
+  function buildCategoryMaps(mapText, catJson) {
+    var idToZh = {};
+    var mapRows = parseCsv(mapText);
+    var head = mapRows[0];
+    var iId = head.indexOf('category_id');
+    var iZh = head.indexOf('chinese_name');
+    if (iId < 0 || iZh < 0) throw new Error('映射表缺少 category_id 或 chinese_name 列');
+
+    for (var i = 1; i < mapRows.length; i += 1) {
+      var r = mapRows[i];
+      if (r && r.length > iZh && String(r[iId]).trim()) {
+        idToZh[String(r[iId]).trim()] = String(r[iZh]).trim();
+      }
+    }
+
+    var idToEn = {};
+    ((catJson && catJson.items) || []).forEach(function (item) {
+      idToEn[String(item.id)] = (item.snippet && item.snippet.title) || '';
+    });
+
+    return { zh: idToZh, en: idToEn };
+  }
+
+  /** 读三个文件并处理成最终的视频数组 */
+  function loadData() {
+    var startedAt = Date.now();
+
+    return Promise.all([
+      fetchText(CONFIG.categoryJsonUrl, false),
+      fetchText(CONFIG.categoryMapUrl, true),
+      fetchText(CONFIG.csvUrl, true),
+    ]).then(function (res) {
+      var maps = buildCategoryMaps(res[1], res[0]);
+
+      var records = parseCsv(res[2]);
+      if (!records.length) throw new Error('CSV 内容为空，无法解析。');
+
+      // 表头建一份「列名 -> 列号」的索引
+      var header = records[0];
+      var col = {};
+      header.forEach(function (name, i) { col[name] = i; });
+
+      var required = ['video_id', 'title', 'channel_title', 'category_id', 'views',
+        'likes', 'dislikes', 'comment_count', 'trending_date', 'publish_time', 'tags'];
+      required.forEach(function (name) {
+        if (col[name] === undefined) throw new Error('原始 CSV 缺少必需字段：' + name);
+      });
+
+      // 按 video_id 去重：同一个视频可能因为多次上榜出现好几行，保留播放量最高的
+      var best = {};
+      var dropped = 0;
+
+      for (var i = 1; i < records.length; i += 1) {
+        var rec = records[i];
+        if (rec.length !== header.length) continue;   // 字段数不对的行跳过
+
+        var videoId = String(rec[col.video_id] || '').trim();
+        var title = String(rec[col.title] || '').trim();
+        var channel = String(rec[col.channel_title] || '').trim();
+        var views = toNumber(rec[col.views]);
+
+        if (!videoId || !title || !channel || views === null) { dropped += 1; continue; }
+        // 关键字段里有「�」说明这行的字节坏了，不可信，丢掉
+        if (videoId.indexOf('\uFFFD') >= 0 || title.indexOf('\uFFFD') >= 0
+          || channel.indexOf('\uFFFD') >= 0) { dropped += 1; continue; }
+
+        var likes = toNumber(rec[col.likes]) || 0;
+        var prev = best[videoId];
+        if (prev) {
+          if (prev.views > views) continue;
+          // 播放量相同时比点赞，留下数值更完整的那条
+          if (prev.views === views && prev.likes >= likes) continue;
+        }
+
+        var categoryId = String(rec[col.category_id] || '').trim();
+
+        best[videoId] = {
+          video_id: videoId,
+          title: title,
+          channel_title: channel,
+          category_name: maps.zh[categoryId] || maps.en[categoryId] || '未分类',
+          views: views,
+          likes: likes,
+          comment_count: toNumber(rec[col.comment_count]) || 0,
+          like_rate: views > 0 ? Number((likes / views).toFixed(6)) : 0,
+          trending_date: String(rec[col.trending_date] || '').trim(),
         };
-
-        if (window.console && console.info) {
-          var parsedRows = records.length - 1;
-          console.info('[Trending Video Insight] 浏览器端处理完成：'
-            + parsedRows + ' 行 → 去重后 ' + videos.length + ' 条，耗时 ' + elapsed + ' 秒'
-            + '（关键字段缺失丢弃 ' + droppedMissing
-            + '，损坏字符丢弃 ' + brokenKey
-            + '，类别未映射 ' + unmapped + '）');
-        }
-
-        return { videos: videos, meta: meta };
-      });
-    }
-  };
-
-  /* ======================================================================
-   * CategoryService —— 类别下拉
-   * ==================================================================== */
-  var CategoryService = {
-    /** 统计类别出现次数，按次数降序、同次数按名称排序 */
-    buildOptions: function (videos) {
-      var counts = Object.create(null);
-      videos.forEach(function (v) {
-        var name = v.category_name;
-        if (!name) return;
-        counts[name] = (counts[name] || 0) + 1;
-      });
-      return Object.keys(counts)
-        .map(function (name) { return { name: name, count: counts[name] }; })
-        .sort(function (a, b) {
-          return b.count - a.count || a.name.localeCompare(b.name, 'zh-Hans-CN');
-        });
-    },
-
-    render: function (options) {
-      // 保留第一个「全部类别」选项，其余重建
-      while (el.categorySelect.options.length > 1) {
-        el.categorySelect.remove(1);
-      }
-      options.forEach(function (opt) {
-        var node = document.createElement('option');
-        node.value = opt.name;
-        node.textContent = opt.name + '（' + opt.count + '）';
-        el.categorySelect.appendChild(node);
-      });
-    }
-  };
-
-  /* ======================================================================
-   * FilterService —— 搜索与类别筛选
-   * ==================================================================== */
-  var FilterService = {
-    /**
-     * 关键词同时匹配「视频标题 / 频道名 / 类别名」，大小写不敏感。
-     * 韩文与中文没有大小写概念，toLowerCase 对其无副作用。
-     */
-    apply: function (videos, keyword, category) {
-      var kw = String(keyword || '').trim().toLowerCase();
-      return videos.filter(function (v) {
-        if (category && v.category_name !== category) return false;
-        if (kw === '') return true;
-        var title = String(v.title || '').toLowerCase();
-        var channel = String(v.channel_title || '').toLowerCase();
-        var cat = String(v.category_name || '').toLowerCase();
-        return title.indexOf(kw) !== -1 ||
-               channel.indexOf(kw) !== -1 ||
-               cat.indexOf(kw) !== -1;
-      });
-    },
-
-    isActive: function () {
-      return String(state.keyword).trim() !== '' || state.category !== '';
-    }
-  };
-
-  /* ======================================================================
-   * SortService —— 排序
-   * ==================================================================== */
-  var SORT_LABELS = { views: '播放量', likes: '点赞数', like_rate: '点赞率' };
-
-  var SortService = {
-    /** 三个指标均为「越大越好」，统一降序；并列时用播放量做稳定兜底 */
-    apply: function (videos, sortKey) {
-      var key = SORT_LABELS[sortKey] ? sortKey : 'views';
-      return videos.slice().sort(function (a, b) {
-        var x = Number(a[key]) || 0;
-        var y = Number(b[key]) || 0;
-        if (y !== x) return y - x;
-        return (Number(b.views) || 0) - (Number(a.views) || 0);
-      });
-    }
-  };
-
-  /* ======================================================================
-   * RankingService —— 取 TOP N
-   * ==================================================================== */
-  var RankingService = {
-    top: function (videos, n) {
-      return videos.slice(0, Math.max(0, n));
-    }
-  };
-
-  /* ======================================================================
-   * ViewRenderer —— 渲染
-   * ==================================================================== */
-
-  function showStatus(opts) {
-    el.statusRegion.hidden = false;
-    el.statusRegion.classList.toggle('status--error', !!opts.error);
-    el.statusSpinner.hidden = !opts.spinner;
-    el.statusTitle.textContent = opts.title || '';
-    el.statusTitle.hidden = !opts.title;
-
-    // detail 允许传入纯文本（含 \n，由 CSS white-space: pre-line 换行）
-    el.statusDetail.textContent = opts.detail || '';
-    el.statusDetail.hidden = !opts.detail;
-    el.statusRetry.hidden = !opts.retry;
-
-    if (!opts.spinner) el.listSection.hidden = true;
-  }
-
-  function hideStatus() {
-    el.statusRegion.hidden = true;
-    el.statusRegion.classList.remove('status--error');
-  }
-
-  var ViewRenderer = {
-    /** 加载中 */
-    renderLoading: function () {
-      el.summary.hidden = true;
-      showStatus({
-        spinner: true,
-        title: '正在加载并解析数据…',
-        detail: '读取 ' + DATA_FILES +
-          '\nCSV 约 35 MB，浏览器需要现场解析去重，首次打开请稍候。'
-      });
-    },
-
-    /** 加载失败：区分 file:// 直接打开与其它异常，给出可操作提示 */
-    renderError: function (err) {
-      var isFileProtocol = location.protocol === 'file:';
-      var detail;
-
-      if (isFileProtocol) {
-        detail =
-          '检测到当前是通过 file:// 直接打开页面，浏览器出于安全策略会阻止 fetch 读取本地文件。\n' +
-          '请改用本地静态服务器访问：\n' +
-          '  1) VS Code 安装 Live Server 扩展，右键 index.html → Open with Live Server\n' +
-          '  2) 或用任意静态服务器，在 study/week3 目录下起服务\n' +
-          '然后访问 http://localhost:5500/';
-      } else {
-        detail =
-          '无法读取 ' + DATA_FILES + '。\n' +
-          '本页面需要这些文件位于 study/week3/data/ 下：\n' +
-          '  KRvideos.csv、KR_category_id.json、YouTube视频分类映射表.csv\n' +
-          '（它们可直接从 data/archive.zip 解压得到）\n' +
-          '错误信息：' + (err && err.message ? err.message : String(err));
       }
 
-      el.summary.hidden = true;
+      // 排序：播放量降序 → 点赞降序 → video_id 升序
+      // 第三个条件是为了「播放量和点赞都相同」时结果固定，刷新多少次都一样
+      var videos = Object.keys(best).map(function (id) { return best[id]; });
+      videos.sort(function (a, b) {
+        return (b.views - a.views)
+          || (b.likes - a.likes)
+          || (a.video_id < b.video_id ? -1 : a.video_id > b.video_id ? 1 : 0);
+      });
+
+      var seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+      console.info('[week3] 浏览器端处理完成：' + (records.length - 1) + ' 行 → 去重后 '
+        + videos.length + ' 条，耗时 ' + seconds + ' 秒（丢弃异常行 ' + dropped + '）');
+
+      return {
+        videos: videos,
+        generatedAt: new Date().toISOString(),
+        rowCount: records.length - 1,
+      };
+    });
+  }
+
+  /* ======================================================================
+   * 5. 状态提示区（加载中 / 加载失败 / 无结果）
+   * ==================================================================== */
+
+  function showStatus(o) {
+    el.status.hidden = false;
+    el.status.classList.toggle('status--error', !!o.error);
+    el.statusSpinner.hidden = !o.spinner;
+    el.statusTitle.textContent = o.title || '';
+    el.statusTitle.hidden = !o.title;
+    el.statusDetail.textContent = o.detail || '';
+    el.statusDetail.hidden = !o.detail;
+    el.statusRetry.hidden = !o.retry;
+
+    // 不是加载中（也就是出错了）就把表格藏起来
+    if (!o.spinner) el.listSection.hidden = true;
+  }
+
+  function renderLoading() {
+    el.summary.hidden = true;
+    showStatus({
+      spinner: true,
+      title: '正在加载并解析数据…',
+      detail: '读取 ' + FILE_LIST
+        + '\nCSV 约 35 MB，浏览器要现场解析去重，首次打开请稍候。',
+    });
+  }
+
+  function renderError(err) {
+    var isFile = location.protocol === 'file:';
+    el.summary.hidden = true;
+
+    if (isFile) {
       showStatus({
         error: true,
         retry: true,
-        title: isFileProtocol ? '需要通过本地服务器打开页面' : '数据加载失败',
-        detail: detail
+        title: '需要通过本地服务器打开页面',
+        detail: '检测到当前用 file:// 直接打开了页面。浏览器出于安全策略会阻止 fetch 读取本地文件。\n'
+          + '请改用本地静态服务器访问：\n'
+          + '  1) VS Code 装 Live Server 扩展，右键 index.html → Open with Live Server\n'
+          + '  2) 或用任意静态服务器，把网站根指向 study/week3\n'
+          + '然后访问 http://localhost:5500/',
       });
-    },
-
-    /** 顶部元数据 */
-    renderMeta: function (meta) {
-      el.updatedAt.textContent = Formatter.timestamp(meta && meta.generated_at);
-      var total = meta && typeof meta.total_records === 'number' ? meta.total_records : state.allVideos.length;
-      el.totalBadge.textContent = '数据集 ' + Formatter.number(total) + ' 条';
-      el.updatedAt.title = meta && meta.generated_at ? String(meta.generated_at) : '';
-    },
-
-    /** 结果统计条 */
-    renderSummary: function (total, shown, isFiltered) {
-      el.summary.textContent = '';
-
-      var frag = document.createDocumentFragment();
-      var strong = document.createElement('strong');
-      // 这里要显示的是「匹配到的总条数」，不是「本次渲染的条数」。
-      // 两者在筛选时通常不同（例如匹配 4,076 条、受 filteredLimit 限制只渲染 100 条）。
-      strong.textContent = Formatter.number(total);
-      frag.appendChild(document.createTextNode('共匹配 '));
-      frag.appendChild(strong);
-      frag.appendChild(document.createTextNode(' 条'));
-
-      var chipSort = document.createElement('span');
-      chipSort.className = 'chip';
-      chipSort.textContent = '按' + SORT_LABELS[state.sortKey] + '降序';
-      frag.appendChild(chipSort);
-
-      if (isFiltered) {
-        var chipScope = document.createElement('span');
-        chipScope.className = 'chip';
-        chipScope.textContent = shown < total
-          ? '显示前 ' + Formatter.number(shown) + ' 条'
-          : '全部显示';
-        frag.appendChild(chipScope);
-
-        if (String(state.keyword).trim() !== '') {
-          var chipKw = document.createElement('span');
-          chipKw.className = 'chip';
-          chipKw.textContent = '关键词「' + String(state.keyword).trim() + '」';
-          frag.appendChild(chipKw);
-        }
-        if (state.category !== '') {
-          var chipCat = document.createElement('span');
-          chipCat.className = 'chip';
-          chipCat.textContent = '类别「' + state.category + '」';
-          frag.appendChild(chipCat);
-        }
-      } else {
-        var chipTop = document.createElement('span');
-        chipTop.className = 'chip';
-        chipTop.textContent = '默认 TOP' + CONFIG.topN;
-        frag.appendChild(chipTop);
-      }
-
-      el.summary.appendChild(frag);
-      el.summary.hidden = false;
-    },
-
-    /** 无结果 */
-    renderEmpty: function () {
-      el.summary.hidden = false;
-      el.rankBody.textContent = '';
-      var tr = document.createElement('tr');
-      var td = document.createElement('td');
-      td.colSpan = 9;
-      td.className = 'cell-empty';
-      td.textContent = state.allVideos.length === 0
-        ? '数据文件为空，没有可展示的视频记录。'
-        : '没有符合当前条件的视频，请调整关键词或类别筛选。';
-      tr.appendChild(td);
-      el.rankBody.appendChild(tr);
-      el.listSection.hidden = false;
-    },
-
-    /**
-     * 渲染榜单表格。
-     * 全部文本使用 textContent 赋值，title 等敏感字符不会被当作 HTML 解析。
-     */
-    renderList: function (rows) {
-      var frag = document.createDocumentFragment();
-
-      rows.forEach(function (v, i) {
-        var rank = i + 1;
-        var tr = document.createElement('tr');
-        if (rank <= 3) tr.className = 'rank-top-' + rank;
-
-        // 排名
-        var tdRank = document.createElement('td');
-        var badge = document.createElement('span');
-        badge.className = 'rank-badge' + (rank <= 3 ? ' rank-badge--' + rank : '');
-        badge.textContent = String(rank);
-        tdRank.appendChild(badge);
-        tr.appendChild(tdRank);
-
-        // 标题 + video_id
-        var tdTitle = document.createElement('td');
-        var wrap = document.createElement('div');
-        wrap.className = 'cell-title';
-        var titleText = document.createElement('span');
-        titleText.className = 'cell-title__text';
-        titleText.textContent = v.title || '(无标题)';
-        titleText.title = v.title || '';
-        var idText = document.createElement('span');
-        idText.className = 'cell-title__id';
-        idText.textContent = v.video_id || '';
-        wrap.appendChild(titleText);
-        wrap.appendChild(idText);
-        tdTitle.appendChild(wrap);
-        tr.appendChild(tdTitle);
-
-        // 频道
-        var tdChannel = document.createElement('td');
-        tdChannel.className = 'cell-channel';
-        tdChannel.textContent = v.channel_title || '—';
-        tr.appendChild(tdChannel);
-
-        // 类别
-        var tdCat = document.createElement('td');
-        var catTag = document.createElement('span');
-        catTag.className = 'cat-tag';
-        catTag.textContent = v.category_name || '未分类';
-        tdCat.appendChild(catTag);
-        tr.appendChild(tdCat);
-
-        // 播放量 / 点赞 / 评论 / 点赞率
-        var numericCells = [
-          { value: Formatter.number(v.views), cls: 'num--views' },
-          { value: Formatter.number(v.likes), cls: 'num--likes' },
-          { value: Formatter.number(v.comment_count), cls: 'num--comments' },
-          { value: Formatter.percent(v.like_rate), cls: 'num--rate' }
-        ];
-        numericCells.forEach(function (cell) {
-          var td = document.createElement('td');
-          var span = document.createElement('span');
-          span.className = 'num ' + cell.cls;
-          span.textContent = cell.value;
-          td.appendChild(span);
-          tr.appendChild(td);
-        });
-
-        // 上榜日期
-        var tdDate = document.createElement('td');
-        tdDate.className = 'cell-date';
-        tdDate.textContent = Formatter.trendingDate(v.trending_date);
-        tr.appendChild(tdDate);
-
-        frag.appendChild(tr);
+    } else {
+      showStatus({
+        error: true,
+        retry: true,
+        title: '数据加载失败',
+        detail: '无法读取 ' + FILE_LIST + '。\n'
+          + '这三个文件应该在 study/week3/data/ 下（可从 data/archive.zip 解压得到）。\n'
+          + '错误信息：' + (err && err.message ? err.message : String(err)),
       });
-
-      el.rankBody.textContent = '';
-      el.rankBody.appendChild(frag);
-      el.listSection.hidden = false;
     }
-  };
-
-  /* ======================================================================
-   * 渲染编排：过滤 -> 排序 -> 截取 -> 渲染
-   * ==================================================================== */
-  function render() {
-    if (state.loadError) return; // 加载失败时保持错误提示
-
-    var filtered = FilterService.apply(state.allVideos, state.keyword, state.category);
-    var sorted = SortService.apply(filtered, state.sortKey);
-    var isFiltered = FilterService.isActive();
-    var limit = isFiltered ? CONFIG.filteredLimit : CONFIG.topN;
-    var rows = RankingService.top(sorted, limit);
-
-    if (rows.length === 0) {
-      ViewRenderer.renderEmpty();
-      return;
-    }
-    ViewRenderer.renderList(rows);
-    ViewRenderer.renderSummary(filtered.length, rows.length, isFiltered);
   }
 
   /* ======================================================================
-   * EventBinder —— 交互绑定
+   * 6. 渲染
    * ==================================================================== */
+
+  /** 顶部：数据更新时间与总条数 */
+  function renderMeta(generatedAt, total) {
+    el.updatedAt.textContent = fmtTime(generatedAt);
+    el.updatedAt.title = generatedAt || '';
+    el.totalBadge.textContent = '数据集 ' + fmtNumber(total) + ' 条';
+  }
+
+  /** 统计条：共匹配多少条 + 当前条件 */
+  function renderSummary(total, shown, isFiltered) {
+    var parts = ['共匹配 ' + fmtNumber(total) + ' 条'];
+
+    parts.push('按' + SORT_LABELS[state.sortKey] + '降序');
+
+    if (isFiltered) {
+      parts.push(shown < total ? '显示前 ' + fmtNumber(shown) + ' 条' : '全部显示');
+      if (state.keyword.trim()) parts.push('关键词「' + state.keyword.trim() + '」');
+      if (state.category) parts.push('类别「' + state.category + '」');
+    } else {
+      parts.push('默认 TOP' + CONFIG.topN);
+    }
+
+    el.summary.textContent = parts.join(' · ');
+    el.summary.hidden = false;
+  }
+
+  /**
+   * 画表格。
+   * 全部文本用 textContent 赋值 —— 视频标题里的 < > 等字符不会被当成 HTML。
+   */
+  function renderList(rows) {
+    var frag = document.createDocumentFragment();
+
+    rows.forEach(function (v, i) {
+      var rank = i + 1;
+      var tr = document.createElement('tr');
+
+      // 排名
+      var tdRank = document.createElement('td');
+      var badge = document.createElement('span');
+      badge.className = 'rank-badge' + (rank <= 3 ? ' rank-badge--' + rank : '');
+      badge.textContent = String(rank);
+      tdRank.appendChild(badge);
+      tr.appendChild(tdRank);
+
+      // 标题 + video_id
+      var tdTitle = document.createElement('td');
+      var titleText = document.createElement('span');
+      titleText.className = 'cell-title__text';
+      titleText.textContent = v.title || '(无标题)';
+      titleText.title = v.title || '';
+      var idText = document.createElement('span');
+      idText.className = 'cell-title__id';
+      idText.textContent = v.video_id;
+      tdTitle.className = 'cell-title';
+      tdTitle.appendChild(titleText);
+      tdTitle.appendChild(idText);
+      tr.appendChild(tdTitle);
+
+      // 频道
+      var tdChannel = document.createElement('td');
+      tdChannel.className = 'cell-channel';
+      tdChannel.textContent = v.channel_title || '—';
+      tr.appendChild(tdChannel);
+
+      // 类别
+      var tdCat = document.createElement('td');
+      var catTag = document.createElement('span');
+      catTag.className = 'cat-tag';
+      catTag.textContent = v.category_name || '未分类';
+      tdCat.appendChild(catTag);
+      tr.appendChild(tdCat);
+
+      // 四个数字列
+      [
+        ['num--views', fmtNumber(v.views)],
+        ['num--likes', fmtNumber(v.likes)],
+        ['num--comments', fmtNumber(v.comment_count)],
+        ['num--rate', fmtPercent(v.like_rate)],
+      ].forEach(function (pair) {
+        var td = document.createElement('td');
+        var span = document.createElement('span');
+        span.className = 'num ' + pair[0];
+        span.textContent = pair[1];
+        td.appendChild(span);
+        tr.appendChild(td);
+      });
+
+      // 上榜日期
+      var tdDate = document.createElement('td');
+      tdDate.className = 'cell-date';
+      tdDate.textContent = v.trending_date || '—';
+      tr.appendChild(tdDate);
+
+      frag.appendChild(tr);
+    });
+
+    el.rankBody.textContent = '';
+    el.rankBody.appendChild(frag);
+    el.listSection.hidden = false;
+  }
+
+  function renderEmpty() {
+    el.summary.hidden = false;
+    el.rankBody.textContent = '';
+
+    var tr = document.createElement('tr');
+    var td = document.createElement('td');
+    td.colSpan = 9;
+    td.className = 'cell-empty';
+    td.textContent = '没有符合当前条件的视频，请调整关键词或类别筛选。';
+    tr.appendChild(td);
+    el.rankBody.appendChild(tr);
+    el.listSection.hidden = false;
+  }
+
+  /**
+   * 主渲染：筛选 → 排序 → 取前 N 条 → 画表格
+   */
+  function render() {
+    if (state.loadError) return;   // 加载失败时保持错误提示
+
+    var keyword = state.keyword.trim().toLowerCase();
+    var filtered = state.allVideos.filter(function (v) {
+      if (state.category && v.category_name !== state.category) return false;
+      if (keyword === '') return true;
+      // 关键词同时匹配标题、频道名、类别名；韩文中文没有大小写，toLowerCase 无副作用
+      return v.title.toLowerCase().indexOf(keyword) !== -1
+        || v.channel_title.toLowerCase().indexOf(keyword) !== -1
+        || v.category_name.toLowerCase().indexOf(keyword) !== -1;
+    });
+
+    var key = SORT_LABELS[state.sortKey] ? state.sortKey : 'views';
+    var sorted = filtered.slice().sort(function (a, b) {
+      if (b[key] !== a[key]) return b[key] - a[key];
+      return b.views - a.views;      // 并列时用播放量兜底
+    });
+
+    var isFiltered = keyword !== '' || state.category !== '';
+    var limit = isFiltered ? CONFIG.filteredLimit : CONFIG.topN;
+    var rows = sorted.slice(0, limit);
+
+    if (rows.length === 0) {
+      renderEmpty();
+      return;
+    }
+    renderList(rows);
+    renderSummary(filtered.length, rows.length, isFiltered);
+  }
+
+  /* ======================================================================
+   * 7. 事件绑定
+   * ==================================================================== */
+
   function updateSortButtons() {
     el.sortButtons.forEach(function (btn) {
       var active = btn.getAttribute('data-sort') === state.sortKey;
@@ -669,20 +501,24 @@
   }
 
   function updateSearchClear() {
-    el.searchClear.hidden = String(state.keyword).trim() === '';
+    el.searchClear.hidden = state.keyword.trim() === '';
   }
 
   function bindEvents() {
-    // 搜索：输入即时过滤（150ms 防抖，兼顾响应与性能）
-    var debounceTimer = null;
+    // 搜索：输入即时过滤。加 150ms 防抖，避免每敲一个字就重排整张表
+    var timer = null;
     el.searchInput.addEventListener('input', function (e) {
       state.keyword = e.target.value;
       updateSearchClear();
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(render, 150);
+      clearTimeout(timer);
+      timer = setTimeout(render, 150);
     });
 
-    // 搜索框清空按钮
+    el.searchInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') e.preventDefault();   // 本页没有 form，回车不做任何事
+    });
+
+    // 清空搜索
     el.searchClear.addEventListener('click', function () {
       state.keyword = '';
       el.searchInput.value = '';
@@ -691,29 +527,22 @@
       el.searchInput.focus();
     });
 
-    // 回车不提交表单（本页无 form），避免意外刷新
-    el.searchInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') e.preventDefault();
-    });
-
     // 类别筛选
     el.categorySelect.addEventListener('change', function (e) {
       state.category = e.target.value;
       render();
     });
 
-    // 排序按钮
+    // 排序
     el.sortButtons.forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var key = btn.getAttribute('data-sort');
-        if (!SORT_LABELS[key] || key === state.sortKey) return;
-        state.sortKey = key;
+        state.sortKey = btn.getAttribute('data-sort');
         updateSortButtons();
         render();
       });
     });
 
-    // 重置：恢复默认「播放量 TOP10」
+    // 重置：回到默认的「播放量 TOP10」
     el.resetBtn.addEventListener('click', function () {
       state.keyword = '';
       state.category = '';
@@ -726,35 +555,55 @@
       el.searchInput.focus();
     });
 
-    // 加载失败后的重试
-    el.statusRetry.addEventListener('click', function () {
-      boot();
-    });
+    // 出错后点「重新加载」
+    el.statusRetry.addEventListener('click', boot);
   }
 
   /* ======================================================================
-   * 启动流程
+   * 8. 启动
    * ==================================================================== */
+
+  /** 类别下拉项：按出现次数从多到少排 */
+  function fillCategorySelect(videos) {
+    var counts = {};
+    videos.forEach(function (v) {
+      counts[v.category_name] = (counts[v.category_name] || 0) + 1;
+    });
+
+    var names = Object.keys(counts).sort(function (a, b) {
+      return counts[b] - counts[a] || a.localeCompare(b, 'zh-Hans-CN');
+    });
+
+    // 保留第一个「全部类别」，其余重建
+    while (el.categorySelect.options.length > 1) el.categorySelect.remove(1);
+
+    names.forEach(function (name) {
+      var o = document.createElement('option');
+      o.value = name;
+      o.textContent = name + '（' + counts[name] + '）';
+      el.categorySelect.appendChild(o);
+    });
+  }
+
   function boot() {
     state.loadError = null;
-    ViewRenderer.renderLoading();
+    renderLoading();
 
-    DataLoader.loadAll()
+    loadData()
       .then(function (data) {
         state.allVideos = data.videos;
-        state.meta = data.meta;
+        el.status.hidden = true;
+        el.status.classList.remove('status--error');
 
-        hideStatus();
-        ViewRenderer.renderMeta(data.meta);
-        CategoryService.render(CategoryService.buildOptions(state.allVideos));
-        // 重建下拉后恢复当前选中项（重试场景）
-        el.categorySelect.value = state.category;
+        renderMeta(data.generatedAt, data.videos.length);
+        fillCategorySelect(data.videos);
+        el.categorySelect.value = state.category;   // 重试时恢复原来的选择
         render();
       })
       .catch(function (err) {
         state.loadError = err;
-        console.error('[Trending Video Insight] 数据加载失败：', err);
-        ViewRenderer.renderError(err);
+        console.error('[week3] 数据加载失败：', err);
+        renderError(err);
       });
   }
 
@@ -763,29 +612,6 @@
     updateSortButtons();
     updateSearchClear();
     boot();
-  }
-
-  /* ======================================================================
-   * 测试钩子
-   * ----------------------------------------------------------------------
-   * 暴露内部模块与状态，供 tests/ 下的校验脚本在不启动浏览器的情况下
-   * 复用真实逻辑（尤其是 CsvParser 与各 Service）。
-   * 使用 __TVIS__ 命名空间，避免污染全局，不影响页面正常运行。
-   * ==================================================================== */
-  if (typeof window !== 'undefined') {
-    window.__TVIS__ = {
-      Formatter: Formatter,
-      CsvParser: CsvParser,
-      FilterService: FilterService,
-      SortService: SortService,
-      CategoryService: CategoryService,
-      RankingService: RankingService,
-      ViewRenderer: ViewRenderer,
-      DataLoader: DataLoader,
-      CONFIG: CONFIG,
-      state: state,
-      render: render
-    };
   }
 
   if (document.readyState === 'loading') {

@@ -1,0 +1,151 @@
+{
+  "countries": [
+    {
+      "cc": "US",
+      "zh": "美国",
+      "total_rows": 40949,
+      "unique_videos": 6351,
+      "dropped_missing": 0,
+      "dropped_broken": 0,
+      "file": "US.csv",
+      "bytes": 2272655
+    },
+    {
+      "cc": "GB",
+      "zh": "英国",
+      "total_rows": 38916,
+      "unique_videos": 3272,
+      "dropped_missing": 0,
+      "dropped_broken": 0,
+      "file": "GB.csv",
+      "bytes": 1117647
+    },
+    {
+      "cc": "CA",
+      "zh": "加拿大",
+      "total_rows": 40881,
+      "unique_videos": 24427,
+      "dropped_missing": 0,
+      "dropped_broken": 0,
+      "file": "CA.csv",
+      "bytes": 9326642
+    },
+    {
+      "cc": "DE",
+      "zh": "德国",
+      "total_rows": 40840,
+      "unique_videos": 29627,
+      "dropped_missing": 0,
+      "dropped_broken": 0,
+      "file": "DE.csv",
+      "bytes": 10982752
+    },
+    {
+      "cc": "FR",
+      "zh": "法国",
+      "total_rows": 40724,
+      "unique_videos": 30581,
+      "dropped_missing": 0,
+      "dropped_broken": 0,
+      "file": "FR.csv",
+      "bytes": 11014017
+    },
+    {
+      "cc": "RU",
+      "zh": "俄罗斯",
+      "total_rows": 40739,
+      "unique_videos": 34282,
+      "dropped_missing": 0,
+      "dropped_broken": 0,
+      "file": "RU.csv",
+      "bytes": 20358652
+    },
+    {
+      "cc": "MX",
+      "zh": "墨西哥",
+      "total_rows": 40451,
+      "unique_videos": 33513,
+      "dropped_missing": 0,
+      "dropped_broken": 0,
+      "file": "MX.csv",
+      "bytes": 12600989
+    },
+    {
+      "cc": "JP",
+      "zh": "日本",
+      "total_rows": 20523,
+      "unique_videos": 12912,
+      "dropped_missing": 0,
+      "dropped_broken": 0,
+      "file": "JP.csv",
+      "bytes": 5021118
+    },
+    {
+      "cc": "KR",
+      "zh": "韩国",
+      "total_rows": 34567,
+      "unique_videos": 15876,
+      "dropped_missing": 0,
+      "dropped_broken": 0,
+      "file": "KR.csv",
+      "bytes": 6525519
+    },
+    {
+      "cc": "IN",
+      "zh": "印度",
+      "total_rows": 37352,
+      "unique_videos": 16307,
+      "dropped_missing": 0,
+      "dropped_broken": 0,
+      "file": "IN.csv",
+      "bytes": 8689099
+    }
+  ],
+  "generated_at": "2026-10-08T02:31:35.369Z",
+  "columns": [
+    "title",
+    "channel_title",
+    "category_id",
+    "views",
+    "likes",
+    "dislikes",
+    "comment_count",
+    "trending_date",
+    "publish_time",
+    "tags"
+  ],
+  "category_map": {
+    "1": "电影与动画",
+    "2": "汽车与交通工具",
+    "10": "音乐",
+    "15": "宠物与动物",
+    "17": "体育",
+    "18": "短片电影",
+    "19": "旅行与活动",
+    "20": "游戏",
+    "21": "视频博客",
+    "22": "人物与博客",
+    "23": "喜剧",
+    "24": "娱乐",
+    "25": "新闻与政治",
+    "26": "教程与风格",
+    "27": "教育",
+    "28": "科学与技术",
+    "29": "非营利组织与公益",
+    "30": "电影（长片）",
+    "31": "动漫/动画",
+    "32": "动作/冒险",
+    "33": "经典",
+    "34": "喜剧（片）",
+    "35": "纪录片",
+    "36": "剧情片",
+    "37": "家庭",
+    "38": "外语片",
+    "39": "恐怖",
+    "40": "科幻/奇幻",
+    "41": "惊悚",
+    "42": "短视频",
+    "43": "节目",
+    "44": "预告片"
+  }
+}

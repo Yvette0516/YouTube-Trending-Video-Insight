@@ -1,0 +1,442 @@
+/* ==========================================================================
+   热门视频数据大屏 —— week5-6
+   纯静态 CSS3，没有外部依赖，也没有预处理器。
+
+   配色规则（和 week3 同一套）：
+     1. 文字只用黑 / 白 / 灰，彩色不当文字色；
+     2. 酒红是页面上唯一的块状主色（标题栏、选中按钮）；
+     3. 奶黄与浅紫只在 JS 里给图表当数据系列色，这个文件里不用它们。
+   ========================================================================== */
+
+/* ---------- 设计变量：改这里就能整体换色 ---------- */
+:root {
+  --bg:         #FFFFFF;   /* 页面底色 */
+  --bg-panel:   #FFFFFF;   /* 面板底色 */
+  --bg-soft:    #FDF2F5;   /* 极淡酒红：控件底色 */
+
+  --line:       #EDE0E4;   /* 常规边框 */
+  --line-soft:  #F3EAED;   /* 更淡的分隔线 */
+
+  --text:       #1A1A1A;
+  --text-dim:   #4A4A4A;
+  --text-faint: #7A7A7A;
+
+  --wine:       #BC4059;   /* 主色：酒红 */
+  --wine-deep:  #94293C;   /* 深一号，用于渐变 */
+  --wine-ink:   #94293C;   /* 白底上的酒红文字（对比度约 8.0，AAA） */
+  --wine-soft:  #FDF2F5;
+  --wine-line:  rgba(188, 64, 89, 0.22);
+  --rose:       #CE5F76;   /* 浅一号，用于错误提示文字 */
+
+  --radius:     10px;
+  --radius-sm:  6px;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: 14px 16px 22px;
+  font-family: "Pretendard", "Malgun Gothic", "맑은 고딕", "Segoe UI",
+               system-ui, -apple-system, "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background-color: var(--bg);
+  /* 背景纹理：一层很淡的细网格就够了，不铺彩色辉光，避免抢图表 */
+  background-image:
+    linear-gradient(rgba(188, 64, 89, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(188, 64, 89, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* 大屏最大宽度，屏幕更宽时居中留白 */
+.dash { max-width: 1920px; margin: 0 auto; }
+
+/* ==========================================================================
+   顶部标题栏
+   ========================================================================== */
+.dash-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 22px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
+  /* 整个页面唯一的大色块：酒红渐变 + 白字 */
+  background: linear-gradient(135deg, var(--wine) 0%, var(--wine-deep) 100%);
+  border-radius: var(--radius);
+  box-shadow: 0 3px 14px rgba(188, 64, 89, 0.26);
+  color: #FFFFFF;
+}
+
+.dash-title {
+  margin: 0 0 4px;
+  font-size: clamp(20px, 1.8vw, 28px);
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #FFFFFF;
+}
+
+/* 标题前的角标：纯白，靠不透明度做层次（不用彩色） */
+.dash-title__mark { color: #FFFFFF; opacity: 0.72; font-size: 0.8em; }
+
+.dash-subtitle {
+  margin: 0;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.dash-subtitle code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  color: #FFFFFF;
+  font-size: 11.5px;
+}
+
+/* ---------- 顶部四个统计卡 ---------- */
+.dash-header__stat {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 6px 14px;
+  min-width: 104px;
+  /* 酒红底上的半透明白卡。
+     透明度不能调高：13% 时白字对比度只有 4.19（不达 AA），
+     6% 时是 4.74，既看得出卡片边界又达标。 */
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: var(--radius-sm);
+}
+
+.stat__value {
+  font-size: 19px;
+  font-weight: 800;
+  color: #FFFFFF;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+  line-height: 1.15;
+}
+
+.stat__label {
+  font-size: 10.5px;
+  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.75);
+  text-transform: uppercase;
+}
+
+.dash-header__time {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 左上角那个会呼吸的圆点（纯装饰）。
+   用的是纯奶黄 #F2D06B，配酒红底对比度约 3.9。
+   它是这条「黄与紫只在图表内部」规则里唯一的例外 —— 一个 7px 的装饰点，
+   不承载数据、不参与文字，所以不影响整页的稳重感。 */
+.dot-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #F2D06B;
+  animation: pulse 2s ease-out infinite;
+}
+
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(242, 208, 107, 0.75); }
+  70%  { box-shadow: 0 0 0 8px rgba(242, 208, 107, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(242, 208, 107, 0); }
+}
+
+/* ==========================================================================
+   控制条：聚焦国家 / 词云文本源 / 热力图指标 / 重置
+   ========================================================================== */
+.dash-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+
+.ctrl { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ctrl--action { margin-left: auto; justify-content: flex-end; }
+
+.ctrl__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.ctrl__select {
+  appearance: none;
+  min-width: 168px;
+  padding: 8px 32px 8px 11px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--text);
+  background-color: var(--bg-soft);
+  /* 下拉箭头：内联 SVG，省一次图片请求 */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%2393a6c4' d='M1 1.5 6 6.5l5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  background-size: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+}
+
+.ctrl__select:focus {
+  border-color: var(--wine-ink);
+  box-shadow: 0 0 0 3px rgba(188, 64, 89, 0.16);
+}
+
+/* ---------- 分段按钮（视频标题 / Tags 标签） ---------- */
+.seg {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.seg__btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--wine-ink);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* 悬停和选中都是「酒红底 + 白字」，保证对比度 */
+.seg__btn:hover,
+.seg__btn.is-active {
+  color: #FFFFFF;
+  background: var(--wine);
+}
+
+/* ---------- 重置按钮 ---------- */
+.ctrl__btn {
+  padding: 8px 18px;
+  font-size: 13.5px;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--wine-ink);
+  background: transparent;
+  border: 1px solid var(--wine-line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.ctrl__btn:hover { background: var(--wine); color: #FFFFFF; }
+
+/* ==========================================================================
+   图表网格：12 栏，面板按 --4 / --6 / --8 跨列
+   ========================================================================== */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 10px 12px 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 面板左上角一小段酒红短线，纯粹做视觉标识 */
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  width: 42px; height: 2px;
+  background: linear-gradient(90deg, var(--wine), transparent);
+}
+
+.panel--4  { grid-column: span 4; }
+.panel--6  { grid-column: span 6; }
+.panel--8  { grid-column: span 8; }
+.panel--12 { grid-column: span 12; }
+
+.panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin-bottom: 4px;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--wine-ink);
+}
+
+/* 词云标题后面那个「全部国家」小胶囊 */
+.panel__badge {
+  margin-left: 4px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1A1A1A;
+  background: var(--wine-soft);
+  border: 1px solid var(--wine-line);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.panel__hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+/* 图表容器的固定高度 —— ECharts 需要一个有确定高度的容器 */
+.panel__body {
+  flex: 1;
+  width: 100%;
+  height: 300px;
+  min-height: 300px;
+}
+
+.panel__body--short { height: 250px; min-height: 250px; }
+.panel__body--tall  { height: 320px; min-height: 320px; }
+
+/* ==========================================================================
+   加载遮罩 / 错误提示
+   ========================================================================== */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+/* hidden 属性默认会被 display:flex 覆盖，这里强制生效 */
+.overlay[hidden] { display: none !important; }
+
+.overlay__spinner {
+  width: 40px; height: 40px;
+  border: 3px solid rgba(188, 64, 89, 0.18);
+  border-top-color: var(--wine);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.overlay__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.overlay__detail {
+  margin: 0;
+  max-width: 720px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text-dim);
+  white-space: pre-line;   /* 让 JS 里写的 \n 真的换行 */
+}
+
+.overlay--error .overlay__title { color: var(--rose); }
+
+/* ==========================================================================
+   页脚
+   ========================================================================== */
+.dash-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  border-top: 1px solid var(--line-soft);
+}
+
+.dash-footer code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(188, 64, 89, 0.08);
+  color: var(--wine-ink);
+}
+
+.dash-footer__note { color: var(--text-dim); }
+
+/* ==========================================================================
+   响应式：窄屏时面板逐级占满整行
+   ========================================================================== */
+@media (max-width: 1500px) {
+  .panel--4 { grid-column: span 6; }
+  .panel--8 { grid-column: span 12; }
+}
+
+@media (max-width: 1080px) {
+  .panel--4, .panel--6, .panel--8, .panel--12 { grid-column: span 12; }
+  .dash-header { align-items: flex-start; }
+  .dash-header__stat { width: 100%; }
+  .stat { flex: 1; }
+  .ctrl--action { margin-left: 0; }
+}
+
+/* 系统设置里开了「减少动态效果」就不做动画 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

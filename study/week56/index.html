@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>热门视频数据大屏 · 十国观看偏好对比 | week5-6</title>
+  <!-- 内联图标：省一次 favicon.ico 请求，避免控制台出现 404 -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23ffffff'/%3E%3Crect x='7' y='17' width='4' height='9' fill='%23BC4059'/%3E%3Crect x='14' y='11' width='4' height='15' fill='%23BC4059'/%3E%3Crect x='21' y='6' width='4' height='20' fill='%23BC4059'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="dash">
+
+    <!-- ===================== 顶部标题栏 ===================== -->
+    <header class="dash-header">
+      <div class="dash-header__left">
+        <h1 class="dash-title">
+          <span class="dash-title__mark" aria-hidden="true">◤</span>
+          热门视频数据大屏
+        </h1>
+        <p class="dash-subtitle">
+          YouTube 十国热门榜 · 观看偏好对比 · 数据源 <code>Kaggle Trending YouTube Video Statistics</code>
+        </p>
+      </div>
+
+      <div class="dash-header__stat">
+        <div class="stat">
+          <span class="stat__value" id="stat-countries">—</span>
+          <span class="stat__label">国家 / 地区</span>
+        </div>
+        <div class="stat">
+          <span class="stat__value" id="stat-videos">—</span>
+          <span class="stat__label">去重后视频</span>
+        </div>
+        <div class="stat">
+          <span class="stat__value" id="stat-views">—</span>
+          <span class="stat__label">播放量合计</span>
+        </div>
+        <div class="stat">
+          <span class="stat__value" id="stat-multi">—</span>
+          <span class="stat__label">跨国同榜视频</span>
+        </div>
+      </div>
+
+      <div class="dash-header__time">
+        <span class="dot-live" aria-hidden="true"></span>
+        <span id="stat-updated">加载中…</span>
+      </div>
+    </header>
+
+    <!-- ===================== 控制条 ===================== -->
+    <section class="dash-controls" aria-label="图表控制">
+      <div class="ctrl">
+        <label class="ctrl__label" for="sel-country">聚焦国家</label>
+        <select id="sel-country" class="ctrl__select">
+          <option value="">全部国家对比</option>
+        </select>
+      </div>
+
+      <div class="ctrl">
+        <span class="ctrl__label" id="wc-label">词云文本源</span>
+        <div class="seg" role="group" aria-labelledby="wc-label">
+          <button class="seg__btn is-active" type="button" data-words="title">视频标题</button>
+          <button class="seg__btn" type="button" data-words="tag">Tags 标签</button>
+        </div>
+      </div>
+
+      <div class="ctrl">
+        <label class="ctrl__label" for="sel-heat">热力图指标</label>
+        <select id="sel-heat" class="ctrl__select">
+          <option value="count">视频数量</option>
+          <option value="avgViews">平均播放量</option>
+          <option value="share">占该国比重</option>
+        </select>
+      </div>
+
+      <div class="ctrl ctrl--action">
+        <button id="btn-reset" class="ctrl__btn" type="button">重置视图</button>
+      </div>
+    </section>
+
+    <!-- ===================== 图表网格（九个） ===================== -->
+    <main class="grid">
+
+      <!-- ① 世界地图 -->
+      <section class="panel panel--6">
+        <div class="panel__head">
+          <h2 class="panel__title">① 各国平均播放量（世界地图）</h2>
+          <span class="panel__hint">颜色越亮 = 单个视频平均播放量越高</span>
+        </div>
+        <div class="panel__body" id="chart-map"></div>
+      </section>
+
+      <!-- ② 国家 × 类别 热力图 -->
+      <section class="panel panel--6">
+        <div class="panel__head">
+          <h2 class="panel__title">② 国家 × 类别 偏好热力图</h2>
+          <span class="panel__hint">一眼看出「哪个国家偏爱哪类视频」，可切换指标</span>
+        </div>
+        <div class="panel__body" id="chart-heat-cat"></div>
+      </section>
+
+      <!-- ③ 词云 -->
+      <section class="panel panel--8">
+        <div class="panel__head">
+          <h2 class="panel__title">③ 高频词云 <span class="panel__badge" id="wc-scope">全部国家</span></h2>
+          <span class="panel__hint" id="wc-hint">词越大 = 出现次数越多</span>
+        </div>
+        <div class="panel__body" id="chart-wordcloud"></div>
+      </section>
+
+      <!-- ④ 发布时间趋势 -->
+      <section class="panel panel--4">
+        <div class="panel__head">
+          <h2 class="panel__title">④ 发布时间趋势</h2>
+          <span class="panel__hint">按月统计上榜视频数量</span>
+        </div>
+        <div class="panel__body" id="chart-time"></div>
+      </section>
+
+      <!-- ⑤ 头部频道 -->
+      <section class="panel panel--4">
+        <div class="panel__head">
+          <h2 class="panel__title">⑤ 头部频道</h2>
+          <span class="panel__hint">按累计播放量排名，条越深播放量越高</span>
+        </div>
+        <div class="panel__body panel__body--tall" id="chart-channels"></div>
+      </section>
+
+      <!-- ⑥ 点赞率分布 -->
+      <section class="panel panel--4">
+        <div class="panel__head">
+          <h2 class="panel__title">⑥ 点赞率分布</h2>
+          <span class="panel__hint">横轴为点赞率区间（%）</span>
+        </div>
+        <div class="panel__body panel__body--tall" id="chart-likerate"></div>
+      </section>
+
+      <!-- ⑦ 类别构成 -->
+      <section class="panel panel--4">
+        <div class="panel__head">
+          <h2 class="panel__title">⑦ 类别构成占比</h2>
+          <span class="panel__hint">各国类别「指纹」对比</span>
+        </div>
+        <div class="panel__body panel__body--tall" id="chart-catshare"></div>
+      </section>
+
+      <!-- ⑧ 跨国同榜热度 -->
+      <section class="panel panel--6">
+        <div class="panel__head">
+          <h2 class="panel__title">⑧ 跨国同榜热度</h2>
+          <span class="panel__hint">两国同时上榜的视频数量 —— 越高说明口味越接近</span>
+        </div>
+        <div class="panel__body panel__body--short" id="chart-overlap"></div>
+      </section>
+
+      <!-- ⑨ 国家 × 星期 观看热度热力图 -->
+      <section class="panel panel--6">
+        <div class="panel__head">
+          <h2 class="panel__title">⑨ 国家 × 星期 观看热度热力图</h2>
+          <span class="panel__hint">各国视频在各天的平均播放量（万次）—— 哪天发的视频最能打</span>
+        </div>
+        <div class="panel__body panel__body--short" id="chart-weekday"></div>
+      </section>
+
+    </main>
+
+    <footer class="dash-footer">
+      <span>week5-6 学习练习 · 静态数据大屏 · ECharts 5.5.1（库文件在 <code>study/lib/</code>，位于本页之外）</span>
+      <span class="dash-footer__note" id="foot-note"></span>
+    </footer>
+  </div>
+
+  <!-- 加载 / 错误遮罩 -->
+  <div id="overlay" class="overlay" role="status" aria-live="polite">
+    <div id="overlay-spinner" class="overlay__spinner"></div>
+    <p id="overlay-title" class="overlay__title">加载中…</p>
+    <p id="overlay-detail" class="overlay__detail"></p>
+  </div>
+
+  <!-- ==================================================================
+       ECharts 依赖加载
+
+       库文件放在 week56 之外（study/lib/），符合「依赖不进本文件夹」的要求。
+       要同时兼容两种网站根，所以按顺序试两条路径，哪条先成功就用哪条：
+         1) lib/      —— 网站根 = study 时命中（推荐；VS Code 的 Live Server 就是这个根）
+         2) ../lib/   —— 网站根 = week56 时命中（库在它的上一级）
+         两条都不行就退回 CDN（需要联网）。
+
+       注意：第一条路径探测失败时，控制台会记一条 404，这是正常现象，
+       紧接着第二条就命中了。
+       ================================================================== -->
+  <script>
+    (function () {
+      var LIB_PATHS = ['lib/', '../lib/'];
+      var FILES = ['echarts.min.js', 'echarts-wordcloud.min.js'];
+
+      // 动态插入一个 <script> 并等它加载完
+      function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+          var s = document.createElement('script');
+          s.src = src;
+          s.onload = resolve;
+          s.onerror = function () { reject(new Error('加载失败：' + src)); };
+          document.head.appendChild(s);
+        });
+      }
+
+      /*
+       * 依次加载一个路径下的所有库文件。
+       * 必须串行：echarts-wordcloud 是 ECharts 的扩展，它一执行就会调用
+       * echarts 的方法，核心库没加载完就报错，所以不能同时插进去。
+       */
+      function loadAll(base, i) {
+        if (i >= FILES.length) return Promise.resolve();
+        return loadScript(base + FILES[i]).then(function () {
+          return loadAll(base, i + 1);
+        });
+      }
+
+      // 依次尝试每条路径：一个路径下所有文件都成功，才算这条可用
+      function tryPath(i) {
+        if (i >= LIB_PATHS.length) return Promise.reject(new Error('本地依赖未找到'));
+        var base = LIB_PATHS[i];
+        return loadAll(base, 0)
+          .then(function () { return base; })
+          .catch(function () {
+            // 这条路径不行：把已经插进去的 script 标签清掉，再试下一条
+            // （不清理的话，失败的那个文件会在控制台留下一堆报错）
+            var inserted = document.querySelectorAll('script[src^="' + base + '"]');
+            Array.prototype.forEach.call(inserted, function (n) { n.remove(); });
+            return tryPath(i + 1);
+          });
+      }
+
+      function startApp() {
+        return loadScript('js/app.js').then(function () {
+          window.__W56_BOOT__();
+        });
+      }
+
+      tryPath(0)
+        .then(function (base) {
+          window.__W56_LIB_BASE__ = base;   // app.js 用它来拼 world.json 的路径
+          return startApp();
+        })
+        .catch(function () {
+          // 本地两条路径都不行，退回 CDN（同样串行：核心先、扩展后）
+          var CDN = 'https://cdn.jsdelivr.net/npm/';
+          return loadScript(CDN + 'echarts@5.5.1/dist/echarts.min.js')
+            .then(function () {
+              return loadScript(CDN + 'echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js');
+            })
+            .then(function () {
+              window.__W56_LIB_BASE__ = CDN + 'echarts@5.5.1/dist/';
+              return startApp();
+            })
+            .catch(function () {
+              // 连 CDN 都不行：把遮罩改成错误提示
+              document.getElementById('overlay-spinner').hidden = true;
+              document.getElementById('overlay-title').textContent = 'ECharts 依赖加载失败';
+              document.getElementById('overlay-detail').textContent =
+                '没找到 ECharts 库文件。\n'
+                + '它应该在 study/lib/ 下（study 与 week56 同级）。\n'
+                + '请把网站根指向 study 目录，或 study/week56，然后刷新页面。';
+            });
+        });
+    })();
+  </script>
+</body>
+</html>

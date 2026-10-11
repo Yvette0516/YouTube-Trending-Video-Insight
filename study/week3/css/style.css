@@ -1,43 +1,51 @@
 /* ==========================================================================
-   韩国热门视频播放量 TOP10 —— 白底黑字 + 红色点缀
-   第三周项目：纯静态 CSS3，无外部依赖、无 CDN
+   韩国热门视频播放量 TOP10 —— week3
+   纯静态 CSS3，没有外部依赖，也没有预处理器。
+
+   配色规则和我们的大屏页保持一致：
+     1. 文字只用黑 / 白 / 灰；
+     2. 酒红是页面上唯一的色块（标题栏、表头、选中按钮）；
+     3. 名次徽章前三名用酒红 / 灰 / 淡粉的梯度，不用金黄。
    ========================================================================== */
 
-/* ---------- 设计变量 ---------- */
+/* ---------- 设计变量：改这里就能整体换色 ---------- */
 :root {
-  /* 底色：白 + 极浅灰，用于区分区块 */
-  --bg-page: #ffffff;
-  --bg-panel: #ffffff;
-  --bg-soft: #f7f8fa;      /* 表头、控件底色 */
-  --bg-row-hover: #fff5f5; /* 悬停：极淡红 */
+  /* 底色 */
+  --bg-page:     #FFFFFF;
+  --bg-soft:     #FDF2F5;   /* 极淡酒红：控制区底色 */
+  --bg-row-hover: #FEF7F9;  /* 表格行悬停色 */
 
   /* 文字：黑为主，灰为辅助 */
-  --text: #111111;
-  --text-dim: #4a4a4a;
-  --text-faint: #8a8a8a;
+  --text:        #111111;
+  --text-dim:    #434343;
+  --text-faint:  #767676;
 
-  /* 红色点缀 */
-  --red: #d92027;
-  --red-deep: #b3161c;
-  --red-soft: #fdecec;
-  --red-line: rgba(217, 32, 39, 0.22);
+  /* 酒红三档 */
+  --wine:        #BC4059;   /* 主色：色块底 */
+  --wine-deep:   #94293C;   /* 深一号：渐变终点、细线 */
+  --wine-ink:    #94293C;   /* 白底上的酒红文字（对比度约 8.0，AAA） */
+  --wine-soft:   #FDF2F5;
+  --wine-line:   rgba(188, 64, 89, 0.18);
 
   /* 边框 */
-  --border: #e6e6e6;
-  --border-strong: #d5d5d5;
+  --border:        #EDE0E4;
+  --border-strong: #E0CBD2;
 
-  /* 名次徽章：第一名红底金字，二三名为灰阶，靠红边强调 */
-  --rank-1: linear-gradient(135deg, #ff4b4b 0%, #c8161d 100%);
-  --rank-2: linear-gradient(135deg, #f0f0f0 0%, #cfcfcf 100%);
-  --rank-3: linear-gradient(135deg, #f7e2cf 0%, #d9a86c 100%);
+  /* 名次徽章：金、银、铜三档都用红灰系，不用金黄 */
+  --rank-1: linear-gradient(135deg, #DA7288 0%, #BC4059 100%);
+  --rank-2: linear-gradient(135deg, #F0F0F0 0%, #CFCFCF 100%);
+  --rank-3: linear-gradient(135deg, #F3E7EA 0%, #C99BA8 100%);
 
-  --radius: 12px;
+  --radius:    12px;
   --radius-sm: 8px;
-  --shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
-  --shadow-strong: 0 6px 22px rgba(0, 0, 0, 0.1);
 }
 
-* { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
+
+/* 关键：给元素加了 display 的类会盖掉浏览器对 [hidden] 的 display:none，
+   所以统一在这里兜底，否则 element.hidden = true 不生效。
+   这个坑踩过：加载转圈会一直盖在表格上。 */
+[hidden] { display: none !important; }
 
 html { -webkit-text-size-adjust: 100%; }
 
@@ -47,17 +55,15 @@ body {
   padding: 28px 20px 40px;
   font-family: "Pretendard", "Malgun Gothic", "맑은 고딕", "Segoe UI",
                system-ui, -apple-system, "Microsoft YaHei", sans-serif;
-  color: var(--text);
-  background: var(--bg-page);
   font-size: 15px;
   line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-page);
 }
 
-.app {
-  max-width: 1500px;
-  margin: 0 auto;
-}
+.app { max-width: 1500px; margin: 0 auto; }
 
+/* 只给屏幕阅读器的文字（表格的 caption） */
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;
@@ -77,9 +83,13 @@ body {
   align-items: flex-end;
   justify-content: space-between;
   gap: 18px;
-  padding: 0 4px 18px;
+  padding: 16px 20px;
   margin-bottom: 20px;
-  border-bottom: 3px solid var(--red);   /* 红色主点缀 */
+  /* 整页唯一的大色块：酒红渐变 + 白字 */
+  background: linear-gradient(135deg, var(--wine) 0%, var(--wine-deep) 100%);
+  border-radius: var(--radius);
+  box-shadow: 0 3px 14px rgba(188, 64, 89, 0.24);
+  color: #FFFFFF;
 }
 
 .app-title {
@@ -88,7 +98,7 @@ body {
   font-weight: 800;
   letter-spacing: -0.4px;
   line-height: 1.2;
-  color: var(--text);
+  color: #FFFFFF;
 }
 
 .app-title__flag { margin-right: 6px; }
@@ -96,49 +106,50 @@ body {
 .app-subtitle {
   margin: 0;
   font-size: 13.5px;
-  color: var(--text-dim);
   line-height: 1.6;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .app-subtitle code {
   padding: 2px 7px;
   border-radius: 5px;
-  background: var(--red-soft);
-  border: 1px solid var(--red-line);
-  color: var(--red-deep);
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  color: #FFFFFF;
   font-size: 12.5px;
 }
 
-.app-subtitle strong { color: var(--red); }
+/* 强调词不做彩色，用纯白（副标题本身是 0.92 透明度的白） */
+.app-subtitle strong { color: #FFFFFF; }
 
 .app-header__meta {
   display: flex;
   align-items: center;
-  gap: 10px;
   flex-wrap: wrap;
+  gap: 10px;
   font-size: 12.5px;
 }
 
-.meta-label { color: var(--text-faint); }
+.meta-label { color: rgba(255, 255, 255, 0.85); }
 
 .meta-value {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
+  color: #FFFFFF;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .meta-badge {
   padding: 3px 10px;
   border-radius: 999px;
-  background: var(--red-soft);
-  border: 1px solid var(--red-line);
-  color: var(--red-deep);
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  color: #FFFFFF;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 /* ==========================================================================
-   控制区
+   控制区：搜索 / 类别筛选 / 排序 / 重置
    ========================================================================== */
 .controls {
   display: grid;
@@ -179,20 +190,20 @@ body {
   font-size: 14.5px;
   font-family: inherit;
   color: var(--text);
-  background: #ffffff;
+  background: #FFFFFF;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   outline: none;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .search-box__input::placeholder { color: var(--text-faint); }
 
 .search-box__input:focus {
-  border-color: var(--red);
-  box-shadow: 0 0 0 3px rgba(217, 32, 39, 0.12);
+  border-color: var(--wine);
+  box-shadow: 0 0 0 3px rgba(188, 64, 89, 0.12);
 }
 
+/* 去掉 Safari 自带的搜索框清除按钮，用我们自己的 */
 .search-box__input::-webkit-search-decoration,
 .search-box__input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 
@@ -206,23 +217,23 @@ body {
   padding: 0;
   font-size: 12px;
   color: var(--text-dim);
-  background: #ededed;
+  background: #EDEDED;
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.search-box__clear:hover { background: var(--red); color: #ffffff; }
+.search-box__clear:hover { background: var(--wine); color: #FFFFFF; }
 
-/* ---------- 下拉框 ---------- */
+/* ---------- 类别下拉框 ---------- */
 .select {
   width: 100%;
   padding: 11px 36px 11px 13px;
   font-size: 14.5px;
   font-family: inherit;
   color: var(--text);
-  background-color: #ffffff;
+  background-color: #FFFFFF;
+  /* 下拉箭头：内联 SVG，省一次图片请求 */
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%234a4a4a' d='M1 1.5 6 6.5l5-5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 13px center;
@@ -232,22 +243,19 @@ body {
   outline: none;
   cursor: pointer;
   appearance: none;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .select:focus {
-  border-color: var(--red);
-  box-shadow: 0 0 0 3px rgba(217, 32, 39, 0.12);
+  border-color: var(--wine);
+  box-shadow: 0 0 0 3px rgba(188, 64, 89, 0.12);
 }
-
-.select option { background: #ffffff; color: var(--text); }
 
 /* ---------- 排序按钮组 ---------- */
 .sort-group {
   display: flex;
   gap: 5px;
   padding: 4px;
-  background: #ffffff;
+  background: #FFFFFF;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
 }
@@ -264,16 +272,13 @@ body {
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease;
 }
 
-.sort-btn:hover { color: var(--red); background: var(--red-soft); }
-
-/* 选中态：红底白字 */
+/* 悬停和选中都是「酒红底 + 白字」 */
+.sort-btn:hover,
 .sort-btn.is-active {
-  color: #ffffff;
-  background: var(--red);
-  box-shadow: 0 2px 8px rgba(217, 32, 39, 0.3);
+  color: #FFFFFF;
+  background: var(--wine);
 }
 
 /* ---------- 重置按钮 ---------- */
@@ -283,48 +288,27 @@ body {
   font-family: inherit;
   font-weight: 600;
   white-space: nowrap;
-  color: var(--red);
-  background: #ffffff;
-  border: 1px solid var(--red);
+  color: var(--wine);
+  background: #FFFFFF;
+  border: 1px solid var(--wine);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease, transform 0.1s ease;
 }
 
-.reset-btn:hover { background: var(--red); color: #ffffff; }
-.reset-btn:active { transform: translateY(1px); }
+.reset-btn:hover { background: var(--wine); color: #FFFFFF; }
 
 /* ==========================================================================
    结果统计条
    ========================================================================== */
 .result-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
   margin-bottom: 12px;
   padding: 0 4px;
   font-size: 13.5px;
   color: var(--text-dim);
 }
 
-.result-summary strong {
-  color: var(--red);
-  font-variant-numeric: tabular-nums;
-  font-size: 15px;
-}
-
-.result-summary .chip {
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: var(--red-soft);
-  border: 1px solid var(--red-line);
-  color: var(--red-deep);
-  font-size: 12.5px;
-}
-
 /* ==========================================================================
-   状态提示（加载中 / 失败 / 无结果）
+   状态提示区（加载中 / 加载失败 / 无结果）
    ========================================================================== */
 .status {
   display: flex;
@@ -337,14 +321,6 @@ body {
   background: var(--bg-soft);
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius);
-}
-
-/* 关键：类选择器的 display 会覆盖浏览器对 [hidden] 的默认 display:none，
-   必须在设置 display 的元素上显式恢复，否则 element.hidden = true 不生效。 */
-.status[hidden],
-.spinner[hidden],
-.search-box__clear[hidden] {
-  display: none !important;
 }
 
 .status__title {
@@ -360,19 +336,11 @@ body {
   font-size: 13.5px;
   line-height: 1.75;
   color: var(--text-dim);
-  white-space: pre-line;
+  white-space: pre-line;   /* 让 JS 里写的 \n 真的换行 */
 }
 
-.status__detail code {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--red-soft);
-  color: var(--red-deep);
-  font-size: 12.5px;
-}
-
-.status--error .status__title { color: var(--red); }
-.status--error { border-color: var(--red); border-style: solid; background: #fffafa; }
+.status--error { border-color: var(--wine); border-style: solid; background: #FFFAFA; }
+.status--error .status__title { color: var(--wine); }
 
 .retry-btn {
   margin-top: 6px;
@@ -380,20 +348,20 @@ body {
   font-size: 13.5px;
   font-family: inherit;
   font-weight: 600;
-  color: #ffffff;
-  background: var(--red);
+  color: #FFFFFF;
+  background: var(--wine);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
-.retry-btn:hover { background: var(--red-deep); }
+.retry-btn:hover { background: var(--wine-deep); }
 
-/* ---------- 加载动画 ---------- */
+/* 加载转圈 */
 .spinner {
   width: 34px; height: 34px;
-  border: 3px solid rgba(217, 32, 39, 0.18);
-  border-top-color: var(--red);
+  border: 3px solid rgba(188, 64, 89, 0.18);
+  border-top-color: var(--wine);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -403,26 +371,24 @@ body {
 /* ==========================================================================
    榜单表格
    ========================================================================== */
-.list-section { border-radius: var(--radius); }
-
 .table-wrap {
   overflow: auto;
   max-height: 68vh;
-  background: #ffffff;
+  background: #FFFFFF;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
 }
 
 .rank-table {
   width: 100%;
   min-width: 1080px;
-  border-collapse: separate;
+  border-collapse: separate;   /* 配合 sticky 表头，不能用 collapse */
   border-spacing: 0;
   font-size: 14px;
 }
 
-/* 表头固定 */
+/* 表头：酒红色块 + 白字，滚动时吸顶 */
 .rank-table thead th {
   position: sticky;
   top: 0;
@@ -434,41 +400,39 @@ body {
   text-transform: uppercase;
   text-align: left;
   white-space: nowrap;
-  color: var(--text-dim);
-  background: var(--bg-soft);
-  border-bottom: 2px solid var(--red);   /* 红色分隔线 */
+  color: #FFFFFF;
+  background: linear-gradient(135deg, var(--wine) 0%, var(--wine-deep) 100%);
+  border-bottom: 2px solid var(--wine-deep);
 }
 
-.rank-table thead th.col-num,
-.rank-table thead th.col-rank { text-align: right; }
+.rank-table thead th.col-num { text-align: right; }
 .rank-table thead th.col-rank { text-align: center; }
 
-.col-rank { width: 74px; }
-.col-title { width: auto; min-width: 300px; }
+/* 各列宽度 */
+.col-rank    { width: 74px; }
+.col-title   { width: auto; min-width: 300px; }
 .col-channel { width: 170px; }
-.col-category { width: 118px; }
-.col-num { width: 116px; }
-.col-date { width: 104px; }
+.col-category{ width: 118px; }
+.col-num     { width: 116px; }
+.col-date    { width: 104px; }
 
-/* 表体 */
 .rank-table tbody td {
   padding: 13px 14px;
   vertical-align: middle;
   border-bottom: 1px solid var(--border);
   color: var(--text);
-  background: #ffffff;
+  background: #FFFFFF;
 }
 
-.rank-table tbody tr { transition: background 0.14s ease; }
 .rank-table tbody tr:hover td { background: var(--bg-row-hover); }
 .rank-table tbody tr:last-child td { border-bottom: none; }
 
-/* 前三名左侧红色强调线 */
-.rank-table tbody tr.rank-top-1 td:first-child { box-shadow: inset 3px 0 0 var(--red); }
-.rank-table tbody tr.rank-top-2 td:first-child { box-shadow: inset 3px 0 0 #b8b8b8; }
-.rank-table tbody tr.rank-top-3 td:first-child { box-shadow: inset 3px 0 0 #d9a86c; }
+/* 前三名在首列左侧加一条强调线 */
+.rank-table tbody tr:nth-child(1) td:first-child { box-shadow: inset 3px 0 0 var(--wine); }
+.rank-table tbody tr:nth-child(2) td:first-child { box-shadow: inset 3px 0 0 #B8B8B8; }
+.rank-table tbody tr:nth-child(3) td:first-child { box-shadow: inset 3px 0 0 var(--wine); }
 
-/* 排名徽章 */
+/* ---------- 排名徽章 ---------- */
 .rank-badge {
   display: inline-flex;
   align-items: center;
@@ -479,27 +443,25 @@ body {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--text-dim);
-  background: #f2f2f2;
+  background: #F2F2F2;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
 
 /* 前三名：第一红底白字，二三浅底深字 */
-.rank-badge--1 {
-  color: #ffffff;
-  background: var(--rank-1);
-  border-color: transparent;
-  box-shadow: 0 2px 8px rgba(200, 22, 29, 0.35);
-}
-.rank-badge--2 { color: #2b2b2b; background: var(--rank-2); border-color: transparent; }
-.rank-badge--3 { color: #4a3208; background: var(--rank-3); border-color: transparent; }
+.rank-badge--1 { color: #FFFFFF; background: var(--rank-1); border-color: transparent; }
+.rank-badge--2 { color: #2B2B2B; background: var(--rank-2); border-color: transparent; }
+.rank-badge--3 { color: #3A3A3A; background: var(--rank-3); border-color: transparent; }
 
-/* 视频标题单元格 */
+/* ---------- 各列内容 ---------- */
+
+/* 视频标题：标题 + video_id 上下排列（这个类加在 td 上） */
 .cell-title { display: flex; flex-direction: column; gap: 4px; }
 
 .cell-title__text {
   font-weight: 600;
   line-height: 1.45;
+  /* 标题最多显示两行，超出的省略 */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -515,69 +477,50 @@ body {
 
 .cell-channel { color: var(--text-dim); word-break: break-word; }
 
-/* 类别标签：红边浅底 */
+/* 类别标签：浅底 + 酒红字 */
 .cat-tag {
   display: inline-block;
   padding: 3px 10px;
   font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
-  color: var(--red-deep);
-  background: var(--red-soft);
-  border: 1px solid var(--red-line);
+  color: var(--wine-ink);
+  background: var(--wine-soft);
+  border: 1px solid var(--wine-line);
   border-radius: 999px;
 }
 
-/* 数值列 */
+/* 四个数字列：统一右对齐、等宽数字 */
 .num {
   display: block;
   text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
   font-weight: 600;
   letter-spacing: 0.2px;
+  font-variant-numeric: tabular-nums;
 }
 
-/* 播放量用红色点缀，其余保持黑色/灰色层级 */
-.num--views { color: var(--red); font-size: 15px; font-weight: 700; }
-.num--likes { color: var(--text); }
+.num--views    { color: var(--text); font-size: 15px; font-weight: 700; }
+.num--likes    { color: var(--text); }
 .num--comments { color: var(--text-dim); font-weight: 500; }
-.num--rate { color: var(--red-deep); font-weight: 700; }
+.num--rate     { color: var(--text); font-weight: 700; }
 
 .cell-date {
   color: var(--text-faint);
   font-size: 12.5px;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
+/* 没有符合条件的结果时，撑满整行的那一格 */
 .rank-table tbody td.cell-empty {
   padding: 52px 20px;
   text-align: center;
-  color: var(--text-dim);
   font-size: 15px;
+  color: var(--text-dim);
 }
 
 /* ==========================================================================
-   页脚
-   ========================================================================== */
-.app-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 20px;
-  padding-top: 16px;
-  font-size: 12.5px;
-  color: var(--text-faint);
-  border-top: 1px solid var(--border);
-}
-
-.app-footer .dot { opacity: 0.6; }
-
-/* ==========================================================================
-   响应式适配
+   响应式
    ========================================================================== */
 @media (max-width: 1180px) {
   .controls { grid-template-columns: 1fr 1fr; }
@@ -591,9 +534,8 @@ body {
   .app-header { flex-direction: column; align-items: flex-start; }
   .table-wrap { max-height: none; }
 
-  /* 小屏隐藏次要列。表头与表体必须隐藏同样的列
-     （频道 = 第 3 列，上榜日期 = 第 9 列），否则会错位。
-     点赞数是排序依据之一，必须保留。 */
+  /* 小屏隐藏「频道」和「上榜日期」两列。
+     表头和表体必须隐藏同样的列（频道是第 3 列、日期是第 9 列），否则会错位。 */
   .rank-table { min-width: 620px; }
   .rank-table thead th.col-channel,
   .rank-table thead th.col-date,
@@ -601,6 +543,7 @@ body {
   .rank-table tbody td:nth-child(9) { display: none; }
 }
 
+/* 系统设置里开了「减少动态效果」就不做动画 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
